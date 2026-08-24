@@ -1,7 +1,7 @@
 # agenzia-tutto (Agenzia TUTTO)
 
 E-commerce statico: portale di servizi dove per ora l'unico attivo e' **Magliette**
-(collezioni Oktoberfest). L'utente si iscrive, sceglie collezione e maglia, sceglie
+(collezioni Beer&VIP e Beer&FILM). L'utente si iscrive, sceglie collezione e maglia, sceglie
 taglia e quantita', riempie il carrello e conferma l'ordine. **Nessuno stock**: si
 raccolgono gli ordini e poi si manda in stampa. **Pagamento a mano al ritiro**, nessun
 pagamento online (i campi per Stripe ci sono gia' nello schema, spenti).
