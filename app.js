@@ -1,0 +1,770 @@
+/* ============================================================
+   Agenzia TUTTO - applicazione (router + viste)
+
+   Il client Supabase (window.sb) lo crea auth.js, che carica DOPO
+   questo file: qui dentro non si tocca sb prima di App.boot().
+
+   Rotte (hash, refresh-safe):
+     #/                              home agenzia (griglia servizi)
+     #/<servizio>                    collezioni del servizio
+     #/<servizio>/<collezione>       maglie della collezione
+     #/<servizio>/<collezione>/<slug> dettaglio maglia
+     #/carrello  #/checkout  #/ordini  #/ordini/<numero>  #/account
+   ============================================================ */
+'use strict';
+
+window.App = (function () {
+  const APP_VER = 'v1';
+  const NET_TIMEOUT = 15000;
+
+  const viewEl = document.getElementById('view');
+  const toastEl = document.getElementById('toast');
+  const overlayEl = document.getElementById('overlay');
+  const backBtn = document.getElementById('backBtn');
+  const cartBadge = document.getElementById('cartBadge');
+  const topSub = document.getElementById('topSub');
+
+  const state = {
+    booted: false,
+    uid: null,
+    profile: null,
+    servizi: [],
+    collezioni: {},      // servizio_id -> [collezioni]
+    conteggi: {},        // collezione_id -> n prodotti
+    prodotti: {},        // collezione_id -> [prodotti]
+    cart: [],
+    ordini: null,
+  };
+
+  // stato locale della vista dettaglio (taglia/quantita' scelte)
+  let pick = { taglia: null, qta: 1 };
+
+  /* ---------------- utilita' ---------------- */
+
+  const eur = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' });
+  const euro = (cent) => eur.format((cent || 0) / 100);
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // rete lenta: meglio un errore che una UI impallata per sempre
+  function withTimeout(promise, ms = NET_TIMEOUT) {
+    return Promise.race([
+      promise,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('Connessione lenta o assente. Riprova.')), ms)),
+    ]);
+  }
+
+  let toastTimer = null;
+  function toast(msg, isErr = false) {
+    toastEl.textContent = msg;
+    toastEl.classList.toggle('err', !!isErr);
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+  }
+
+  function confirmModal(titolo, testo, okLabel = 'Conferma', danger = false) {
+    return new Promise((resolve) => {
+      overlayEl.innerHTML = `
+        <div class="modal">
+          <h3>${esc(titolo)}</h3>
+          <p>${esc(testo)}</p>
+          <div class="row">
+            <button class="btn ghost" data-modal="no">Annulla</button>
+            <button class="btn ${danger ? 'danger' : ''}" data-modal="si">${esc(okLabel)}</button>
+          </div>
+        </div>`;
+      overlayEl.hidden = false;
+      const close = (val) => { overlayEl.hidden = true; overlayEl.innerHTML = ''; resolve(val); };
+      overlayEl.onclick = (e) => {
+        if (e.target === overlayEl) return close(false);
+        const b = e.target.closest('[data-modal]');
+        if (b) close(b.dataset.modal === 'si');
+      };
+    });
+  }
+
+  function skeletonGrid(n = 6) {
+    let h = '<div class="grid">';
+    for (let i = 0; i < n; i++) h += '<div class="skel"><div class="box"></div><div class="bar"></div><div class="bar short"></div></div>';
+    return h + '</div>';
+  }
+
+  function emptyState(icona, titolo, testo, cta) {
+    return `
+      <div class="empty">
+        <div class="ico">${icona}</div>
+        <h3>${esc(titolo)}</h3>
+        <p>${esc(testo)}</p>
+        ${cta || ''}
+      </div>`;
+  }
+
+  const ICO = {
+    tshirt: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 3 5 4.8 3 9l3 1.6V21h12V10.6L21 9l-2-4.2L15.5 3a3.5 3.5 0 0 1-7 0Z"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    gift: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="12" rx="2"/><path d="M3 13h18M12 9v12"/><path d="M12 9S10.5 4 8 4a2.2 2.2 0 0 0 0 5h4Zm0 0s1.5-5 4-5a2.2 2.2 0 0 1 0 5h-4Z"/></svg>',
+    cart: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.55L21 8H6.2"/><circle cx="10" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg>',
+    box: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l1 4H5l1-4Z"/><path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M9 11h6"/></svg>',
+    chev: '<svg class="chev" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+  };
+
+  function immagine(p, cls = '') {
+    const src = Array.isArray(p.immagini) && p.immagini.length ? p.immagini[0] : null;
+    if (src) return `<img src="${esc(src)}" alt="${esc(p.nome)}" loading="lazy" />`;
+    return `<div class="shot-ph ${cls}"><span>${esc(p.nome)}</span></div>`;
+  }
+
+  /* ---------------- accesso ai dati ---------------- */
+
+  async function q(builder) {
+    const { data, error } = await withTimeout(builder);
+    if (error) throw new Error(error.message || 'Errore di rete');
+    return data;
+  }
+
+  async function loadServizi() {
+    if (state.servizi.length) return state.servizi;
+    state.servizi = await q(window.sb.from('servizi').select('*').order('ordine')) || [];
+    return state.servizi;
+  }
+
+  async function loadCollezioni(servizioId) {
+    if (state.collezioni[servizioId]) return state.collezioni[servizioId];
+    const coll = await q(window.sb.from('collezioni').select('*').eq('servizio_id', servizioId).order('ordine')) || [];
+    state.collezioni[servizioId] = coll;
+    // conteggio maglie per collezione: il catalogo e' piccolo, una query sola basta
+    if (coll.length) {
+      const righe = await q(window.sb.from('prodotti').select('id, collezione_id')
+        .in('collezione_id', coll.map((c) => c.id))) || [];
+      state.conteggi = {};
+      righe.forEach((r) => { state.conteggi[r.collezione_id] = (state.conteggi[r.collezione_id] || 0) + 1; });
+    }
+    return coll;
+  }
+
+  async function loadProdotti(collezioneId) {
+    if (state.prodotti[collezioneId]) return state.prodotti[collezioneId];
+    const p = await q(window.sb.from('prodotti').select('*').eq('collezione_id', collezioneId).order('ordine')) || [];
+    state.prodotti[collezioneId] = p;
+    return p;
+  }
+
+  async function loadCart() {
+    state.cart = await q(window.sb.from('carrello_righe')
+      .select('id, prodotto_id, taglia, quantita, prodotti(id, slug, nome, prezzo_cent, immagini, collezione_id)')
+      .order('created_at')) || [];
+    aggiornaBadge();
+    return state.cart;
+  }
+
+  function aggiornaBadge() {
+    const n = state.cart.reduce((s, r) => s + r.quantita, 0);
+    cartBadge.textContent = String(n);
+    cartBadge.hidden = n === 0;
+  }
+
+  const totaleCarrello = () =>
+    state.cart.reduce((s, r) => s + r.quantita * ((r.prodotti && r.prodotti.prezzo_cent) || 0), 0);
+
+  async function aggiungiAlCarrello(prodottoId, taglia, qta) {
+    const esistente = state.cart.find((r) => r.prodotto_id === prodottoId && r.taglia === taglia);
+    if (esistente) {
+      const nuova = Math.min(99, esistente.quantita + qta);
+      await q(window.sb.from('carrello_righe')
+        .update({ quantita: nuova, updated_at: new Date().toISOString() }).eq('id', esistente.id));
+    } else {
+      await q(window.sb.from('carrello_righe')
+        .insert({ user_id: state.uid, prodotto_id: prodottoId, taglia, quantita: qta }));
+    }
+    await loadCart();
+  }
+
+  async function cambiaQuantita(rigaId, delta) {
+    const riga = state.cart.find((r) => r.id === rigaId);
+    if (!riga) return;
+    const nuova = riga.quantita + delta;
+    if (nuova <= 0) return rimuoviRiga(rigaId, true);
+    if (nuova > 99) return;
+    await q(window.sb.from('carrello_righe')
+      .update({ quantita: nuova, updated_at: new Date().toISOString() }).eq('id', rigaId));
+    await loadCart();
+    renderCarrello();
+  }
+
+  async function rimuoviRiga(rigaId, silenzioso = false) {
+    if (!silenzioso) {
+      const ok = await confirmModal('Togliere la maglia?', 'La riga sparisce dal carrello.', 'Togli', true);
+      if (!ok) return;
+    }
+    await q(window.sb.from('carrello_righe').delete().eq('id', rigaId));
+    await loadCart();
+    renderCarrello();
+  }
+
+  async function loadOrdini(force = false) {
+    if (state.ordini && !force) return state.ordini;
+    state.ordini = await q(window.sb.from('ordini')
+      .select('*, ordini_righe(*)')
+      .order('created_at', { ascending: false })) || [];
+    return state.ordini;
+  }
+
+  /* ---------------- stati ordine ---------------- */
+
+  const STATI = [
+    ['in_attesa_pagamento', 'Da pagare'],
+    ['pagato', 'Pagato'],
+    ['in_stampa', 'In stampa'],
+    ['pronto', 'Pronto per il ritiro'],
+    ['consegnato', 'Consegnato'],
+  ];
+  const etichettaStato = (s) => (s === 'annullato' ? 'Annullato' : (STATI.find((x) => x[0] === s) || [, s])[1]);
+
+  const dataIt = (iso) => new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  /* ---------------- router ---------------- */
+
+  const RISERVATE = ['carrello', 'checkout', 'ordini', 'account'];
+
+  function segmenti() {
+    const h = location.hash.replace(/^#\/?/, '');
+    return h.split('/').filter(Boolean).map(decodeURIComponent);
+  }
+
+  function vai(hash) { location.hash = hash; }
+
+  async function route() {
+    if (!state.booted) return;
+    const s = segmenti();
+    window.scrollTo(0, 0);
+    aggiornaNav(s);
+
+    try {
+      if (!s.length) return await renderHome();
+      if (s[0] === 'carrello') return await vistaCarrello();
+      if (s[0] === 'checkout') return await renderCheckout();
+      if (s[0] === 'ordini') return s[1] ? await renderOrdine(s[1]) : await renderOrdini();
+      if (s[0] === 'account') return renderAccount();
+      if (s.length === 1) return await renderServizio(s[0]);
+      if (s.length === 2) return await renderCollezione(s[0], s[1]);
+      return await renderProdotto(s[0], s[1], s[2]);
+    } catch (err) {
+      viewEl.innerHTML = emptyState(ICO.box, 'Qualcosa non ha funzionato', err.message || 'Riprova tra un momento.',
+        '<button class="btn ghost" data-action="ricarica">Riprova</button>');
+    }
+  }
+
+  function aggiornaNav(s) {
+    const primo = s[0] || '';
+    backBtn.hidden = s.length === 0;
+    document.querySelectorAll('.tab').forEach((t) => {
+      const g = t.dataset.goto.replace(/^#\/?/, '');
+      const attivo = (g === '' && s.length === 0) || (g !== '' && primo === g);
+      t.classList.toggle('is-active', attivo);
+    });
+    const sub = {
+      '': 'Facciamo tutto', carrello: 'Il tuo carrello', checkout: 'Conferma ordine',
+      ordini: 'I tuoi ordini', account: 'Il tuo profilo',
+    };
+    if (sub[primo] !== undefined) {
+      topSub.textContent = sub[primo];
+    } else {
+      const sv = state.servizi.find((x) => x.id === primo);
+      topSub.textContent = sv ? 'Servizio ' + sv.nome.toLowerCase() : 'Agenzia TUTTO';
+    }
+  }
+
+  function indietro() {
+    const s = segmenti();
+    if (s.length <= 1) return vai('#/');
+    vai('#/' + s.slice(0, s.length - 1).map(encodeURIComponent).join('/'));
+  }
+
+  /* ---------------- viste ---------------- */
+
+  async function renderHome() {
+    viewEl.innerHTML = `
+      <section class="hero">
+        <p class="kicker">Agenzia TUTTO</p>
+        <h2>Facciamo tutto.<br />Per ora, magliette.</h2>
+        <p>Scegli il servizio, il resto lo mettiamo noi. Si ordina qui, si paga al ritiro.</p>
+      </section>
+      <div class="section-title"><h2>I nostri servizi</h2></div>
+      <div class="grid uno" id="servizi">${skeletonGrid(2)}</div>`;
+
+    const servizi = await loadServizi();
+    const box = document.getElementById('servizi');
+    if (!servizi.length) {
+      box.outerHTML = emptyState(ICO.box, 'Ancora nessun servizio', 'Torna tra poco: stiamo preparando le cose.');
+      return;
+    }
+    box.classList.remove('grid');
+    box.className = 'grid uno';
+    box.innerHTML = servizi.map((sv) => {
+      const ico = ICO[sv.icona] || ICO.box;
+      if (sv.stato !== 'attivo') {
+        return `
+          <div class="card servizio soon">
+            <div class="ico">${ico}</div>
+            <div class="txt"><h3>${esc(sv.nome)}</h3><p>${esc(sv.descrizione || '')}</p></div>
+            <span class="pill-soon">In arrivo</span>
+          </div>`;
+      }
+      return `
+        <a class="card servizio" href="#/${esc(sv.id)}">
+          <div class="ico">${ico}</div>
+          <div class="txt"><h3>${esc(sv.nome)}</h3><p>${esc(sv.descrizione || '')}</p></div>
+          ${ICO.chev}
+        </a>`;
+    }).join('');
+  }
+
+  async function renderServizio(servizioId) {
+    const servizi = await loadServizi();
+    const sv = servizi.find((x) => x.id === servizioId);
+    if (!sv || sv.stato !== 'attivo') {
+      viewEl.innerHTML = emptyState(ICO.box, 'Servizio non disponibile', 'Questo servizio non è ancora aperto.',
+        '<a class="btn ghost" href="#/">Torna alla home</a>');
+      return;
+    }
+    viewEl.innerHTML = `
+      <p class="crumb">Agenzia TUTTO</p>
+      <div class="section-title"><h2>${esc(sv.nome)}</h2></div>
+      <p class="muted" style="margin:0 0 18px;font-size:14.5px;line-height:1.5">${esc(sv.descrizione || '')}</p>
+      <div class="section-title"><h2>Collezioni</h2></div>
+      <div class="grid wide" id="coll">${skeletonGrid(2)}</div>`;
+
+    const coll = await loadCollezioni(servizioId);
+    const box = document.getElementById('coll');
+    if (!coll.length) {
+      box.outerHTML = emptyState(ICO.tshirt, 'Nessuna collezione', 'Le maglie arrivano presto.');
+      return;
+    }
+    box.innerHTML = coll.map((c) => {
+      const n = state.conteggi[c.id] || 0;
+      const cover = c.cover
+        ? `<img src="${esc(c.cover)}" alt="${esc(c.nome)}" loading="lazy" />`
+        : `<span class="anno">${esc(c.anno || '')}</span>`;
+      return `
+        <a class="card collezione" href="#/${esc(servizioId)}/${esc(c.slug)}">
+          <div class="cover">${cover}</div>
+          <div class="body">
+            <h3>${esc(c.nome)}</h3>
+            <p>${esc(c.descrizione || '')}</p>
+            <p class="meta">${n} ${n === 1 ? 'maglia' : 'maglie'}</p>
+          </div>
+        </a>`;
+    }).join('');
+  }
+
+  async function renderCollezione(servizioId, collSlug) {
+    const coll = await loadCollezioni(servizioId);
+    const c = coll.find((x) => x.slug === collSlug);
+    if (!c) {
+      viewEl.innerHTML = emptyState(ICO.tshirt, 'Collezione non trovata', 'Forse il link è vecchio.',
+        `<a class="btn ghost" href="#/${esc(servizioId)}">Vedi le collezioni</a>`);
+      return;
+    }
+    viewEl.innerHTML = `
+      <p class="crumb">${esc(c.nome)}</p>
+      <div class="section-title"><h2>Le maglie</h2></div>
+      <p class="muted" style="margin:0 0 16px;font-size:14.5px;line-height:1.5">${esc(c.descrizione || '')}</p>
+      <div class="grid" id="prod">${skeletonGrid(4)}</div>`;
+
+    const prodotti = await loadProdotti(c.id);
+    const box = document.getElementById('prod');
+    if (!prodotti.length) {
+      box.outerHTML = emptyState(ICO.tshirt, 'Collezione in preparazione', 'Le maglie di questa collezione non sono ancora online.');
+      return;
+    }
+    box.innerHTML = prodotti.map((p) => `
+      <a class="card prodotto" href="#/${esc(servizioId)}/${esc(collSlug)}/${esc(p.slug)}">
+        <div class="shot">${immagine(p)}</div>
+        <div class="body">
+          <h3>${esc(p.nome)}</h3>
+          ${p.riferimento ? `<p class="rif">${esc(p.riferimento)}</p>` : ''}
+          <p class="prezzo">${euro(p.prezzo_cent)}</p>
+        </div>
+      </a>`).join('');
+  }
+
+  async function renderProdotto(servizioId, collSlug, prodSlug) {
+    const coll = await loadCollezioni(servizioId);
+    const c = coll.find((x) => x.slug === collSlug);
+    if (!c) return renderCollezione(servizioId, collSlug);
+    const prodotti = await loadProdotti(c.id);
+    const p = prodotti.find((x) => x.slug === prodSlug);
+    if (!p) {
+      viewEl.innerHTML = emptyState(ICO.tshirt, 'Maglia non trovata', 'Questa maglia non è più disponibile.',
+        `<a class="btn ghost" href="#/${esc(servizioId)}/${esc(collSlug)}">Vedi la collezione</a>`);
+      return;
+    }
+
+    pick = { taglia: null, qta: 1 };
+    const taglie = Array.isArray(p.taglie) ? p.taglie : [];
+
+    viewEl.innerHTML = `
+      <div class="detail">
+        <div class="gallery">${immagine(p)}</div>
+        <div>
+          <p class="crumb">${esc(c.nome)}</p>
+          <h2>${esc(p.nome)}</h2>
+          ${p.riferimento ? `<p class="rif">da ${esc(p.riferimento)}</p>` : ''}
+          ${p.descrizione ? `<p class="descr">${esc(p.descrizione)}</p>` : ''}
+          <p class="prezzo-big">${euro(p.prezzo_cent)}</p>
+
+          <div class="field-label"><span>Taglia</span><span class="hint" id="tagliaHint">Scegli la taglia</span></div>
+          <div class="sizes" id="taglie">
+            ${taglie.map((t) => `<button class="size" data-action="taglia" data-taglia="${esc(t)}">${esc(t)}</button>`).join('')}
+          </div>
+
+          <div class="field-label"><span>Quantità</span></div>
+          <div class="qty">
+            <button data-action="qta-meno" aria-label="Meno">-</button>
+            <span class="val" id="qtaVal">1</span>
+            <button data-action="qta-piu" aria-label="Piu">+</button>
+          </div>
+
+          <div style="margin-top:22px">
+            <button class="btn block" id="addBtn" data-action="aggiungi" data-id="${esc(p.id)}" disabled>
+              <span class="lbl">Aggiungi al carrello</span>
+            </button>
+          </div>
+          <p class="muted" style="margin:12px 0 0;font-size:12.5px;line-height:1.5">
+            Si stampa dopo aver raccolto gli ordini: nessuna taglia va esaurita.
+            Paghi al ritiro, in contanti o come vi mettete d'accordo.
+          </p>
+        </div>
+      </div>`;
+  }
+
+  function aggiornaPick() {
+    const val = document.getElementById('qtaVal');
+    if (val) val.textContent = String(pick.qta);
+    const hint = document.getElementById('tagliaHint');
+    if (hint) hint.textContent = pick.taglia ? 'Taglia ' + pick.taglia : 'Scegli la taglia';
+    const add = document.getElementById('addBtn');
+    if (add) add.disabled = !pick.taglia;
+    document.querySelectorAll('.size').forEach((b) => b.classList.toggle('is-active', b.dataset.taglia === pick.taglia));
+  }
+
+  async function vistaCarrello() {
+    viewEl.innerHTML = `<div class="section-title"><h2>Carrello</h2></div>${skeletonGrid(2)}`;
+    await loadCart();
+    renderCarrello();
+  }
+
+  function renderCarrello() {
+    if (!state.cart.length) {
+      viewEl.innerHTML = `
+        <div class="section-title"><h2>Carrello</h2></div>
+        ${emptyState(ICO.cart, 'Il carrello è vuoto', 'Scegli una maglia dalle collezioni e torna qui.',
+          '<a class="btn" href="#/magliette">Vai alle maglie</a>')}`;
+      return;
+    }
+    const righe = state.cart.map((r) => {
+      const p = r.prodotti || {};
+      const tot = r.quantita * (p.prezzo_cent || 0);
+      return `
+        <div class="cart-row">
+          <div class="thumb">${immagine(p)}</div>
+          <div class="info">
+            <h3>${esc(p.nome)}</h3>
+            <p class="sub">Taglia ${esc(r.taglia)} - ${euro(p.prezzo_cent)} cad.</p>
+            <p class="riga-tot">${euro(tot)}</p>
+            <div class="azioni">
+              <div class="qty">
+                <button data-action="riga-meno" data-id="${esc(r.id)}" aria-label="Meno">-</button>
+                <span class="val">${r.quantita}</span>
+                <button data-action="riga-piu" data-id="${esc(r.id)}" aria-label="Piu">+</button>
+              </div>
+              <button class="link-danger" data-action="riga-togli" data-id="${esc(r.id)}">Togli</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    const capi = state.cart.reduce((s, r) => s + r.quantita, 0);
+    viewEl.innerHTML = `
+      <div class="section-title"><h2>Carrello</h2><span class="count">${capi} ${capi === 1 ? 'capo' : 'capi'}</span></div>
+      ${righe}
+      <div class="riepilogo">
+        <div class="r"><span>Ritiro a mano</span><span>Gratis</span></div>
+        <div class="r tot"><span>Totale</span><span class="v">${euro(totaleCarrello())}</span></div>
+      </div>
+      <div class="sticky-cta">
+        <a class="btn block" href="#/checkout">Vai all'ordine</a>
+      </div>`;
+  }
+
+  async function renderCheckout() {
+    await loadCart();
+    if (!state.cart.length) return vai('#/carrello');
+
+    const pr = state.profile || {};
+    const nome = [pr.nome, pr.cognome].filter(Boolean).join(' ') || pr.username || '';
+    const capi = state.cart.reduce((s, r) => s + r.quantita, 0);
+
+    viewEl.innerHTML = `
+      <p class="crumb">Ultimo passo</p>
+      <div class="section-title"><h2>Conferma ordine</h2></div>
+
+      <div class="riepilogo" style="margin-top:0">
+        ${state.cart.map((r) => `
+          <div class="riga-ordine">
+            <div>
+              <div>${esc((r.prodotti || {}).nome)}</div>
+              <div class="q">Taglia ${esc(r.taglia)} - quantità ${r.quantita}</div>
+            </div>
+            <div class="p">${euro(r.quantita * ((r.prodotti || {}).prezzo_cent || 0))}</div>
+          </div>`).join('')}
+        <div class="r tot"><span>Totale (${capi})</span><span class="v">${euro(totaleCarrello())}</span></div>
+      </div>
+
+      <form id="checkoutForm" novalidate style="margin-top:20px">
+        <label class="field">
+          <span>Nome e cognome</span>
+          <input id="ckNome" type="text" autocomplete="name" value="${esc(nome)}" required />
+        </label>
+        <label class="field">
+          <span>Telefono</span>
+          <input id="ckTel" type="tel" inputmode="tel" autocomplete="tel" value="${esc(pr.telefono || '')}" placeholder="es. 333 1234567" required />
+        </label>
+        <label class="field">
+          <span>Note (facoltative)</span>
+          <textarea id="ckNote" placeholder="Quando passi a ritirare, richieste particolari..."></textarea>
+        </label>
+        <p class="form-msg" id="ckMsg" hidden></p>
+        <button class="btn block" id="ckBtn" type="submit"><span class="lbl">Invia ordine</span></button>
+      </form>
+      <p class="muted" style="margin:14px 0 0;font-size:12.5px;line-height:1.5">
+        Nessun pagamento online: l'ordine resta da pagare finché non ci vediamo. Ritiro a mano.
+      </p>`;
+  }
+
+  async function inviaOrdine() {
+    const btn = document.getElementById('ckBtn');
+    const msg = document.getElementById('ckMsg');
+    const nome = document.getElementById('ckNome').value.trim();
+    const tel = document.getElementById('ckTel').value.trim();
+    const note = document.getElementById('ckNote').value.trim();
+
+    msg.hidden = true;
+    if (!nome || !tel) {
+      msg.textContent = 'Servono nome e telefono per accordarci sul ritiro.';
+      msg.hidden = false;
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="lbl">Invio...</span><span class="spin-dot"></span>';
+    try {
+      const { data, error } = await withTimeout(
+        window.sb.rpc('crea_ordine', { p_nome: nome, p_telefono: tel, p_note: note || null })
+      );
+      if (error) throw new Error(error.message || 'Ordine non riuscito');
+
+      // il telefono lo teniamo sul profilo: al prossimo ordine e' gia' li'
+      if (!state.profile || state.profile.telefono !== tel) {
+        try {
+          await withTimeout(window.sb.from('profiles').update({ telefono: tel }).eq('id', state.uid));
+          if (state.profile) state.profile.telefono = tel;
+        } catch (_) { /* non e' un motivo per bloccare l'ordine */ }
+      }
+
+      state.ordini = null;
+      await loadCart();
+      toast('Ordine ' + data.numero + ' inviato!');
+      vai('#/ordini/' + encodeURIComponent(data.numero));
+    } catch (err) {
+      msg.textContent = err.message || 'Ordine non riuscito. Riprova.';
+      msg.hidden = false;
+      btn.disabled = false;
+      btn.innerHTML = '<span class="lbl">Invia ordine</span>';
+    }
+  }
+
+  async function renderOrdini() {
+    viewEl.innerHTML = `<div class="section-title"><h2>I tuoi ordini</h2></div>${skeletonGrid(2)}`;
+    const ordini = await loadOrdini(true);
+    if (!ordini.length) {
+      viewEl.innerHTML = `
+        <div class="section-title"><h2>I tuoi ordini</h2></div>
+        ${emptyState(ICO.box, 'Nessun ordine', 'Quando ordini una maglia la trovi qui, con il suo stato.',
+          '<a class="btn" href="#/magliette">Vai alle maglie</a>')}`;
+      return;
+    }
+    viewEl.innerHTML = `
+      <div class="section-title"><h2>I tuoi ordini</h2><span class="count">${ordini.length}</span></div>
+      ${ordini.map((o) => {
+        const capi = (o.ordini_righe || []).reduce((s, r) => s + r.quantita, 0);
+        return `
+        <a class="ordine-card" href="#/ordini/${esc(o.numero)}">
+          <div class="head">
+            <span class="num">${esc(o.numero)}</span>
+            <span class="stato s-${esc(o.stato)}">${esc(etichettaStato(o.stato))}</span>
+          </div>
+          <p class="data">${esc(dataIt(o.created_at))} - ${capi} ${capi === 1 ? 'capo' : 'capi'}</p>
+          <p class="tot">${euro(o.totale_cent)}</p>
+        </a>`;
+      }).join('')}`;
+  }
+
+  async function renderOrdine(numero) {
+    const ordini = await loadOrdini();
+    const o = ordini.find((x) => x.numero === numero);
+    if (!o) {
+      viewEl.innerHTML = emptyState(ICO.box, 'Ordine non trovato', 'Controlla nella lista dei tuoi ordini.',
+        '<a class="btn ghost" href="#/ordini">I tuoi ordini</a>');
+      return;
+    }
+    const idx = STATI.findIndex((s) => s[0] === o.stato);
+    const timeline = o.stato === 'annullato'
+      ? '<li class="now"><span class="dot"></span>Ordine annullato</li>'
+      : STATI.map((s, i) => {
+          const cls = i < idx ? 'done' : (i === idx ? 'now' : '');
+          return `<li class="${cls}"><span class="dot"></span>${esc(s[1])}</li>`;
+        }).join('');
+
+    viewEl.innerHTML = `
+      <p class="crumb">Ordine</p>
+      <div class="section-title"><h2>${esc(o.numero)}</h2><span class="stato s-${esc(o.stato)}">${esc(etichettaStato(o.stato))}</span></div>
+      <p class="muted" style="margin:0;font-size:13.5px">${esc(dataIt(o.created_at))}</p>
+
+      <div class="riepilogo">
+        ${(o.ordini_righe || []).map((r) => `
+          <div class="riga-ordine">
+            <div>
+              <div>${esc(r.nome_prodotto)}</div>
+              <div class="q">Taglia ${esc(r.taglia)} - quantità ${r.quantita}${r.collezione_nome ? ' - ' + esc(r.collezione_nome) : ''}</div>
+            </div>
+            <div class="p">${euro(r.quantita * r.prezzo_unit_cent)}</div>
+          </div>`).join('')}
+        <div class="r tot"><span>Totale</span><span class="v">${euro(o.totale_cent)}</span></div>
+      </div>
+
+      <div class="section-title"><h2>A che punto siamo</h2></div>
+      <ul class="timeline">${timeline}</ul>
+
+      <div class="riepilogo">
+        <div class="r"><span>Ritiro</span><span>A mano</span></div>
+        <div class="r"><span>Contatto</span><span>${esc(o.nome_contatto)}</span></div>
+        <div class="r"><span>Telefono</span><span>${esc(o.telefono)}</span></div>
+        ${o.note ? `<div class="r"><span>Note</span><span>${esc(o.note)}</span></div>` : ''}
+      </div>
+      <p class="muted" style="margin:14px 0 0;font-size:12.5px;line-height:1.5">${esc(window.AGENZIA_CONFIG.CONTATTO_RITIRO || '')}</p>`;
+  }
+
+  function renderAccount() {
+    const p = state.profile || {};
+    const iniziale = (p.nome || p.username || '?').trim().charAt(0).toUpperCase();
+    const nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ');
+    viewEl.innerHTML = `
+      <div class="acc-head">
+        <div class="acc-avatar">${esc(iniziale)}</div>
+        <div>
+          <h2>${esc(nomeCompleto || p.username || '')}</h2>
+          <p>@${esc(p.username || '')}</p>
+        </div>
+      </div>
+
+      <a class="list-link" href="#/ordini"><span>I tuoi ordini</span>${ICO.chev}</a>
+      <a class="list-link" href="#/carrello"><span>Carrello</span>${ICO.chev}</a>
+
+      <div class="riepilogo">
+        ${p.email ? `<div class="r"><span>Email</span><span>${esc(p.email)}</span></div>` : ''}
+        <div class="r"><span>Telefono</span><span>${esc(p.telefono || 'non indicato')}</span></div>
+        <div class="r"><span>Versione</span><span>${APP_VER}</span></div>
+      </div>
+
+      <div style="margin-top:18px">
+        <button class="btn ghost block" data-action="logout">Esci</button>
+      </div>`;
+  }
+
+  /* ---------------- eventi ---------------- */
+
+  viewEl.addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-action]');
+    if (!t) return;
+    const a = t.dataset.action;
+
+    if (a === 'taglia') { pick.taglia = t.dataset.taglia; aggiornaPick(); return; }
+    if (a === 'qta-meno') { pick.qta = Math.max(1, pick.qta - 1); aggiornaPick(); return; }
+    if (a === 'qta-piu') { pick.qta = Math.min(99, pick.qta + 1); aggiornaPick(); return; }
+    if (a === 'ricarica') { route(); return; }
+    if (a === 'logout') { window.Auth && window.Auth.logout(); return; }
+
+    if (a === 'aggiungi') {
+      if (!pick.taglia) return;
+      t.disabled = true;
+      const lbl = t.querySelector('.lbl');
+      const testo = lbl.textContent;
+      lbl.textContent = 'Aggiungo...';
+      try {
+        await aggiungiAlCarrello(t.dataset.id, pick.taglia, pick.qta);
+        toast('Aggiunta al carrello: taglia ' + pick.taglia + ' x' + pick.qta);
+        lbl.textContent = testo;
+        t.disabled = false;
+      } catch (err) {
+        toast(err.message || 'Non sono riuscito ad aggiungerla', true);
+        lbl.textContent = testo;
+        t.disabled = false;
+      }
+      return;
+    }
+
+    if (a === 'riga-piu' || a === 'riga-meno') {
+      t.disabled = true;
+      try { await cambiaQuantita(t.dataset.id, a === 'riga-piu' ? 1 : -1); }
+      catch (err) { toast(err.message || 'Modifica non riuscita', true); t.disabled = false; }
+      return;
+    }
+    if (a === 'riga-togli') {
+      try { await rimuoviRiga(t.dataset.id); }
+      catch (err) { toast(err.message || 'Non sono riuscito a toglierla', true); }
+    }
+  });
+
+  viewEl.addEventListener('submit', (e) => {
+    if (e.target.id === 'checkoutForm') { e.preventDefault(); inviaOrdine(); }
+  });
+
+  backBtn.addEventListener('click', indietro);
+  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => vai(t.dataset.goto)));
+  window.addEventListener('hashchange', route);
+
+  /* ---------------- avvio ---------------- */
+
+  async function boot(uid) {
+    state.uid = uid;
+    state.booted = true;
+    try {
+      const prof = await q(window.sb.from('profiles').select('*').eq('id', uid).maybeSingle());
+      state.profile = prof || null;
+    } catch (_) { state.profile = null; }
+    try { await loadCart(); } catch (_) { /* il badge riprova al prossimo giro */ }
+    await route();
+  }
+
+  function reset() {
+    state.booted = false;
+    state.uid = null;
+    state.profile = null;
+    state.servizi = [];
+    state.collezioni = {};
+    state.conteggi = {};
+    state.prodotti = {};
+    state.cart = [];
+    state.ordini = null;
+    viewEl.innerHTML = '';
+    cartBadge.hidden = true;
+  }
+
+  return { boot, reset, route, toast, state, APP_VER };
+})();

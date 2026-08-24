@@ -1,0 +1,10 @@
+# build artifacts strumenti dev (C#)
+**/bin/
+**/obj/
+
+# memoria di progetto locale (dati sensibili, repo pubblico)
+.claude/local.md
+
+# os
+Thumbs.db
+.DS_Store
