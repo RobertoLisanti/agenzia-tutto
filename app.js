@@ -14,7 +14,7 @@
 'use strict';
 
 window.App = (function () {
-  const APP_VER = 'v1';
+  const APP_VER = 'v2';
   const NET_TIMEOUT = 15000;
 
   const viewEl = document.getElementById('view');
@@ -262,7 +262,7 @@ window.App = (function () {
   function aggiornaNav(s) {
     const primo = s[0] || '';
     backBtn.hidden = s.length === 0;
-    document.querySelectorAll('.tab').forEach((t) => {
+    document.querySelectorAll('.menu-item').forEach((t) => {
       const g = t.dataset.goto.replace(/^#\/?/, '');
       const attivo = (g === '' && s.length === 0) || (g !== '' && primo === g);
       t.classList.toggle('is-active', attivo);
@@ -291,8 +291,8 @@ window.App = (function () {
     viewEl.innerHTML = `
       <section class="hero">
         <p class="kicker">Agenzia TUTTO</p>
-        <h2>Facciamo tutto.<br />Per ora, magliette.</h2>
-        <p>Scegli il servizio, il resto lo mettiamo noi. Si ordina qui, si paga al ritiro.</p>
+        <h2>Facciamo tutto.</h2>
+        <p>Scegli il servizio, il resto lo mettiamo noi.</p>
       </section>
       <div class="section-title"><h2>I nostri servizi</h2></div>
       <div class="grid uno" id="servizi">${skeletonGrid(2)}</div>`;
@@ -736,8 +736,34 @@ window.App = (function () {
   });
 
   backBtn.addEventListener('click', indietro);
-  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => vai(t.dataset.goto)));
   window.addEventListener('hashchange', route);
+
+  /* menu in alto a destra: si apre col bottone, si chiude con Esc,
+     con un clic fuori o scegliendo una voce */
+  const menuBtn = document.getElementById('menuBtn');
+  const menuEl = document.getElementById('menu');
+
+  function apriMenu(apri) {
+    menuEl.hidden = !apri;
+    menuBtn.setAttribute('aria-expanded', apri ? 'true' : 'false');
+  }
+
+  menuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    apriMenu(menuEl.hidden);
+  });
+  menuEl.addEventListener('click', (e) => {
+    const voce = e.target.closest('.menu-item');
+    if (!voce) return;
+    apriMenu(false);
+    vai(voce.dataset.goto);
+  });
+  document.addEventListener('click', (e) => {
+    if (!menuEl.hidden && !menuEl.contains(e.target)) apriMenu(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !menuEl.hidden) apriMenu(false);
+  });
 
   /* ---------------- avvio ---------------- */
 
