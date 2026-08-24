@@ -256,7 +256,7 @@ main#view {
 
 /* prodotti */
 .prodotto .shot {
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 2 / 3;
   background: var(--surface-2);
   display: grid; place-items: center;
   position: relative;
@@ -291,10 +291,11 @@ main#view {
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--surface-2);
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 2 / 3;
+  max-height: 74vh;
   display: grid; place-items: center;
 }
-.detail .gallery img { width: 100%; height: 100%; object-fit: cover; }
+.detail .gallery img { width: 100%; height: 100%; object-fit: contain; }
 .detail h2 { font-size: 26px; line-height: 1.1; }
 .detail .rif { margin: 6px 0 0; font-size: 13.5px; color: var(--muted); font-style: italic; }
 .detail .descr { margin: 14px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.55; }
@@ -352,7 +353,7 @@ main#view {
   background: var(--surface); padding: 12px;
   margin-bottom: 10px;
 }
-.cart-row .thumb { width: 66px; height: 66px; flex: none; border-radius: 11px; overflow: hidden; background: var(--surface-2); }
+.cart-row .thumb { width: 62px; height: 93px; flex: none; border-radius: 11px; overflow: hidden; background: var(--surface-2); }
 .cart-row .thumb img { width: 100%; height: 100%; object-fit: cover; }
 .cart-row .info { flex: 1; min-width: 0; }
 .cart-row h3 { font-size: 15.5px; }
@@ -431,7 +432,7 @@ main#view {
 
 .skel { border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
 .skel .bar, .skel .box { background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%); background-size: 400% 100%; animation: shimmer 1.3s linear infinite; }
-.skel .box { aspect-ratio: 1 / 1; }
+.skel .box { aspect-ratio: 2 / 3; }
 .skel .bar { height: 12px; border-radius: 6px; margin: 12px; }
 .skel .bar.short { width: 45%; }
 @keyframes shimmer { to { background-position: -400% 0; } }
