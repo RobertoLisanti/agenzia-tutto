@@ -14,7 +14,7 @@
 'use strict';
 
 window.App = (function () {
-  const APP_VER = 'v4';
+  const APP_VER = 'v5';
   const NET_TIMEOUT = 15000;
 
   const viewEl = document.getElementById('view');
