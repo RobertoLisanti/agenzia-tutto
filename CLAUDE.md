@@ -1,12 +1,16 @@
 # agenzia-tutto (Agenzia TUTTO)
 
-E-commerce statico: portale di servizi dove per ora l'unico attivo e' **Magliette**
-(collezioni Beer&VIP e Beer&FILM). L'utente si iscrive, sceglie collezione e maglia, sceglie
-taglia e quantita', riempie il carrello e conferma l'ordine. **Nessuno stock**: si
-raccolgono gli ordini e poi si manda in stampa. **Pagamento a mano al ritiro**, nessun
-pagamento online (i campi per Stripe ci sono gia' nello schema, spenti).
+Portale di servizi dell'Agenzia. Due tipi di servizio:
 
-Repo **pubblico** `RobertoLisanti/agenzia-tutto`.
+- **catalogo** (oggi: Magliette, collezioni Beer&VIP e Beer&FILM) - l'utente si iscrive,
+  sceglie la maglia, taglia e quantita', riempie il carrello e conferma l'ordine.
+  **Nessuno stock**: si raccolgono gli ordini e poi si manda in stampa. **Pagamento a mano
+  al ritiro**, nessun pagamento online (i campi per Stripe ci sono gia' nello schema, spenti).
+- **scheda** (oggi: Serramenti, Eventi) - la pagina di chi fa quel mestiere, con i bottoni
+  per scrivergli su WhatsApp o chiamarlo. Niente acquisto dal sito.
+
+Repo **pubblico** `RobertoLisanti/agenzia-tutto`, live su
+https://robertolisanti.github.io/agenzia-tutto/ (GitHub Pages da `main`, auto-deploy al push).
 
 **Architettura (come)** -> skill `sito-web-statico` + `backend-supabase` (nel repo di
 config, `.claude\skills\`).
