@@ -256,7 +256,7 @@ main#view {
 
 /* prodotti */
 .prodotto .shot {
-  aspect-ratio: 2 / 3;
+  aspect-ratio: var(--shot-ratio, 2 / 3);
   background: var(--surface-2);
   display: grid; place-items: center;
   position: relative;
@@ -329,7 +329,7 @@ main#view {
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--surface-2);
-  aspect-ratio: 2 / 3;
+  aspect-ratio: var(--shot-ratio, 2 / 3);
   max-height: 74vh;
   display: grid; place-items: center;
 }
