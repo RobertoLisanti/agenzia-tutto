@@ -1,3 +1,0 @@
-Le foto delle maglie Beer&VIP vanno qui dentro.
-Nome del file = lo slug della maglia + "-1" (es. dua-ipa-1.jpg).
-Se non sai lo slug, buttale qui con qualsiasi nome: le rinomino io.

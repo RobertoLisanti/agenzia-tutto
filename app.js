@@ -14,7 +14,7 @@
 'use strict';
 
 window.App = (function () {
-  const APP_VER = 'v5';
+  const APP_VER = 'v6';
   const NET_TIMEOUT = 15000;
 
   const viewEl = document.getElementById('view');
@@ -424,7 +424,7 @@ window.App = (function () {
       <p class="crumb">${esc(c.nome)}</p>
       <div class="section-title"><h2>Le maglie</h2></div>
       <p class="muted" style="margin:0 0 16px;font-size:14.5px;line-height:1.5">${esc(c.descrizione || '')}</p>
-      <div class="grid" id="prod">${skeletonGrid(4)}</div>`;
+      <div class="grid" id="prod" style="--shot-ratio: ${esc(c.formato || '2 / 3')}">${skeletonGrid(4)}</div>`;
 
     const prodotti = await loadProdotti(c.id);
     const box = document.getElementById('prod');
@@ -460,7 +460,7 @@ window.App = (function () {
 
     viewEl.innerHTML = `
       <div class="detail">
-        <div class="gallery">${immagine(p)}</div>
+        <div class="gallery" style="--shot-ratio: ${esc(c.formato || '2 / 3')}">${immagine(p)}</div>
         <div>
           <p class="crumb">${esc(c.nome)}</p>
           <h2>${esc(p.nome)}</h2>
