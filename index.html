@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" />
-  <link rel="stylesheet" href="styles.css?v=7" />
+  <link rel="stylesheet" href="styles.css?v=8" />
 </head>
 <body>
   <div id="app">
@@ -44,13 +44,17 @@
               <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
               <span>Home</span>
             </button>
-            <button class="menu-item" role="menuitem" data-goto="#/ordini">
+            <button class="menu-item" role="menuitem" data-goto="#/ordini" data-solo="loggato">
               <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l1 4H5l1-4Z"/><path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M9 11h6"/></svg>
               <span>Ordini</span>
             </button>
-            <button class="menu-item" role="menuitem" data-goto="#/account">
+            <button class="menu-item" role="menuitem" data-goto="#/account" data-solo="loggato">
               <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>
               <span>Account</span>
+            </button>
+            <button class="menu-item" role="menuitem" data-solo="visitatore" data-azione="accedi" hidden>
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"/></svg>
+              <span>Accedi</span>
             </button>
           </div>
         </div>
@@ -63,9 +67,9 @@
   <div id="overlay" class="overlay-host" hidden></div>
   <div id="toast" class="toast"></div>
 
-  <script src="config.js?v=7"></script>
+  <script src="config.js?v=8"></script>
   <script src="vendor/supabase.js"></script>
-  <script src="app.js?v=7"></script>
-  <script src="auth.js?v=7"></script>
+  <script src="app.js?v=8"></script>
+  <script src="auth.js?v=8"></script>
 </body>
 </html>

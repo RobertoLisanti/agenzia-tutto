@@ -521,7 +521,8 @@ main#view {
 /* ---------------- schermata auth ---------------- */
 .auth-screen {
   position: fixed; inset: 0; z-index: 90;
-  background: var(--bg);
+  background: rgba(8, 9, 12, .86);
+  backdrop-filter: blur(7px);
   background-image:
     radial-gradient(900px 500px at 80% -10%, rgba(242, 167, 27, .16), transparent 60%),
     radial-gradient(700px 420px at 6% 6%, rgba(59, 125, 221, .12), transparent 58%);
@@ -529,7 +530,16 @@ main#view {
   padding: 22px;
   overflow-y: auto;
 }
-.auth-card { width: min(400px, 100%); }
+.auth-card { width: min(400px, 100%); position: relative; }
+.auth-close {
+  position: absolute; top: -6px; right: -4px;
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  border-radius: 11px;
+  color: var(--muted);
+  transition: background .15s, color .15s;
+}
+.auth-close:hover { background: var(--surface-2); color: var(--text); }
 .auth-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
 .auth-brand .brand-mark { width: 46px; height: 46px; border-radius: 14px; }
 .auth-brand .brand-mark::after { font-size: 26px; }
@@ -540,6 +550,7 @@ main#view {
 .auth-tab.is-active { background: var(--accent); color: var(--accent-ink); }
 .auth-msg { margin: 2px 0 12px; font-size: 13.5px; font-weight: 600; color: var(--bad); }
 .auth-msg.ok { color: var(--ok); }
+.auth-msg.info { color: var(--muted); }
 .auth-submit { width: 100%; margin-top: 4px; padding: 14px; border-radius: 13px; background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: 15.5px; display: flex; align-items: center; justify-content: center; gap: 9px; transition: transform .12s var(--ease), opacity .15s; }
 .auth-submit:active { transform: scale(.98); }
 .auth-submit:disabled { opacity: .55; }

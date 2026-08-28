@@ -24,15 +24,17 @@ window.Auth = (function () {
   });
   window.sb = client;
 
-  const appEl = document.getElementById('app');
-
   /* ---------------- schermata ---------------- */
 
   const overlay = document.createElement('div');
   overlay.id = 'auth';
   overlay.className = 'auth-screen';
+  overlay.hidden = true;   // il sito si guarda da sloggati: si apre solo su richiesta
   overlay.innerHTML = `
     <div class="auth-card">
+      <button class="auth-close" id="authClose" aria-label="Chiudi">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
       <div class="auth-brand">
         <span class="brand-mark"></span>
         <div><h1>Agenzia TUTTO</h1><p class="muted">Facciamo tutto</p></div>
@@ -87,7 +89,7 @@ window.Auth = (function () {
   const surnameField = $('#surnameField'), phoneField = $('#phoneField');
   const emailEl = $('#authEmail'), nameEl = $('#authName'), surnameEl = $('#authSurname');
   const phoneEl = $('#authPhone'), userEl = $('#authUser'), passEl = $('#authPass');
-  const msgEl = $('#authMsg'), submitBtn = $('#authSubmit');
+  const msgEl = $('#authMsg'), submitBtn = $('#authSubmit'), chiudiBtn = $('#authClose');
   const submitLbl = submitBtn.querySelector('.lbl'), submitSpin = submitBtn.querySelector('.spin-dot');
   const hintEl = $('#authHint');
 
@@ -122,13 +124,23 @@ window.Auth = (function () {
     submitSpin.hidden = !on;
   }
 
-  function mostraSchermata() {
+  // La schermata non e' piu' un cancello: il sito si guarda da sloggati e
+  // questa si apre solo quando serve un account (carrello, ordini, profilo).
+  function mostraSchermata(motivo) {
     overlay.hidden = false;
-    appEl.style.visibility = 'hidden';
+    setMode('login');
+    if (motivo) {
+      msgEl.textContent = motivo;
+      msgEl.classList.add('info');
+      msgEl.classList.remove('ok');
+      msgEl.hidden = false;
+    }
+    setTimeout(() => userEl.focus(), 60);
   }
   function nascondiSchermata() {
     overlay.hidden = true;
-    appEl.style.visibility = '';
+    msgEl.classList.remove('info');
+    messaggio('');
   }
 
   /* ---------------- azioni ---------------- */
@@ -226,10 +238,8 @@ window.Auth = (function () {
 
   async function logout() {
     try { await client.auth.signOut(); } catch (_) { /* la sessione locale la buttiamo comunque */ }
-    window.App.reset();
     location.hash = '#/';
-    setMode('login');
-    mostraSchermata();
+    await window.App.boot(null);   // resta sul sito, da visitatore
   }
 
   /* ---------------- eventi ---------------- */
@@ -240,28 +250,27 @@ window.Auth = (function () {
     if (a) setMode(a.dataset.goto);
   });
   form.addEventListener('submit', submit);
+  chiudiBtn.addEventListener('click', () => nascondiSchermata());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) nascondiSchermata(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !overlay.hidden) nascondiSchermata();
+  });
 
-  // sessione scaduta o revocata mentre l'app e' aperta
+  // sessione scaduta o revocata mentre l'app e' aperta: si continua a navigare
   client.auth.onAuthStateChange((evt) => {
-    if (evt === 'SIGNED_OUT') {
-      window.App.reset();
-      mostraSchermata();
-    }
+    if (evt === 'SIGNED_OUT' && window.App.state.uid) window.App.boot(null);
   });
 
   /* ---------------- avvio ---------------- */
 
   (async function start() {
-    mostraSchermata();
-    setMode('login');
+    let uid = null;
     try {
       const { data } = await client.auth.getSession();
-      if (data && data.session) {
-        nascondiSchermata();
-        await window.App.boot(data.session.user.id);
-      }
-    } catch (_) { /* si resta sulla schermata di accesso */ }
+      if (data && data.session) uid = data.session.user.id;
+    } catch (_) { /* si entra da visitatore */ }
+    await window.App.boot(uid);
   })();
 
-  return { logout, client };
+  return { logout, client, apri: mostraSchermata };
 })();

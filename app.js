@@ -14,7 +14,8 @@
 'use strict';
 
 window.App = (function () {
-  const APP_VER = 'v7';
+  const APP_VER = 'v8';
+  const AP = String.fromCharCode(39);   // apostrofo, per non litigare con le virgolette
   const NET_TIMEOUT = 15000;
 
   const viewEl = document.getElementById('view');
@@ -114,6 +115,7 @@ window.App = (function () {
     finestra: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M12 3.5v17M3.5 12h17"/></svg>',
     check: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.5 5.5L20 6.5"/></svg>',
     whatsapp: '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12.04 2C6.6 2 2.2 6.4 2.2 11.84c0 1.74.46 3.44 1.32 4.94L2 22l5.36-1.4a9.8 9.8 0 0 0 4.68 1.2h.01c5.43 0 9.84-4.4 9.84-9.84C21.89 6.4 17.48 2 12.04 2zm5.72 14.02c-.24.68-1.4 1.3-1.94 1.34-.5.05-.98.23-3.3-.69-2.78-1.1-4.55-3.94-4.69-4.12-.13-.18-1.12-1.49-1.12-2.84 0-1.35.7-2.02.95-2.29.25-.27.55-.34.73-.34.18 0 .37 0 .53.01.17.01.4-.06.62.48.24.57.8 1.98.87 2.12.07.14.12.3.02.48-.09.18-.14.3-.28.46-.14.16-.3.36-.42.48-.14.14-.29.29-.12.57.16.27.73 1.2 1.56 1.95 1.07.95 1.98 1.25 2.26 1.39.27.14.43.12.59-.07.16-.18.68-.79.86-1.07.18-.27.36-.22.6-.13.25.09 1.57.74 1.84.87.27.14.45.2.51.32.07.11.07.64-.17 1.32z"/></svg>',
+    utente: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>',
     telefono: '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h3l1.5 4-2 1.5a12.5 12.5 0 0 0 6.5 6.5L17 13l4 1.5v3a2 2 0 0 1-2.2 2C10.4 18.8 5.2 13.6 4.5 5.2A2 2 0 0 1 6.5 3z"/></svg>',
   };
 
@@ -170,6 +172,18 @@ window.App = (function () {
     const n = state.cart.reduce((s, r) => s + r.quantita, 0);
     cartBadge.textContent = String(n);
     cartBadge.hidden = n === 0;
+  }
+
+  const loggato = () => !!state.uid;
+
+  // chiede l'accesso solo quando serve davvero (carrello, ordini, profilo)
+  function chiediAccesso(motivo) {
+    if (window.Auth && window.Auth.apri) window.Auth.apri(motivo);
+  }
+
+  function invitoAccesso(titolo, testo) {
+    return emptyState(ICO.utente, titolo, testo,
+      '<button class="btn" data-action="accedi">Accedi o iscriviti</button>');
   }
 
   const totaleCarrello = () =>
@@ -267,9 +281,11 @@ window.App = (function () {
     const primo = s[0] || '';
     backBtn.hidden = s.length === 0;
     document.querySelectorAll('.menu-item').forEach((t) => {
-      const g = t.dataset.goto.replace(/^#\/?/, '');
+      const g = (t.dataset.goto || '').replace(/^#\/?/, '');
       const attivo = (g === '' && s.length === 0) || (g !== '' && primo === g);
       t.classList.toggle('is-active', attivo);
+      if (t.dataset.solo === 'loggato') t.hidden = !loggato();
+      if (t.dataset.solo === 'visitatore') t.hidden = loggato();
     });
     const sub = {
       '': 'Facciamo tutto', carrello: 'Il tuo carrello', checkout: 'Conferma ordine',
@@ -504,6 +520,12 @@ window.App = (function () {
   }
 
   async function vistaCarrello() {
+    if (!loggato()) {
+      viewEl.innerHTML = '<div class="section-title"><h2>Carrello</h2></div>' +
+        invitoAccesso('Il carrello e' + AP + ' di chi ha un account',
+          'Guardare le maglie e' + AP + ' libero: per metterle nel carrello e ordinare serve iscriversi, ci vuole un minuto.');
+      return;
+    }
     viewEl.innerHTML = `<div class="section-title"><h2>Carrello</h2></div>${skeletonGrid(2)}`;
     await loadCart();
     renderCarrello();
@@ -553,6 +575,7 @@ window.App = (function () {
   }
 
   async function renderCheckout() {
+    if (!loggato()) return vai('#/carrello');
     await loadCart();
     if (!state.cart.length) return vai('#/carrello');
 
@@ -640,6 +663,11 @@ window.App = (function () {
   }
 
   async function renderOrdini() {
+    if (!loggato()) {
+      viewEl.innerHTML = '<div class="section-title"><h2>I tuoi ordini</h2></div>' +
+        invitoAccesso('Qui finiscono i tuoi ordini', 'Accedi per vedere cosa hai ordinato e a che punto e' + AP + '.');
+      return;
+    }
     viewEl.innerHTML = `<div class="section-title"><h2>I tuoi ordini</h2></div>${skeletonGrid(2)}`;
     const ordini = await loadOrdini(true);
     if (!ordini.length) {
@@ -666,6 +694,7 @@ window.App = (function () {
   }
 
   async function renderOrdine(numero) {
+    if (!loggato()) return renderOrdini();
     const ordini = await loadOrdini();
     const o = ordini.find((x) => x.numero === numero);
     if (!o) {
@@ -711,6 +740,11 @@ window.App = (function () {
   }
 
   function renderAccount() {
+    if (!loggato()) {
+      viewEl.innerHTML = invitoAccesso('Nessun account',
+        'Accedi o iscriviti per ordinare le maglie e seguire i tuoi ordini.');
+      return;
+    }
     const p = state.profile || {};
     const iniziale = (p.nome || p.username || '?').trim().charAt(0).toUpperCase();
     const nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ');
@@ -750,8 +784,14 @@ window.App = (function () {
     if (a === 'ricarica') { route(); return; }
     if (a === 'logout') { window.Auth && window.Auth.logout(); return; }
 
+    if (a === 'accedi') { chiediAccesso(); return; }
+
     if (a === 'aggiungi') {
       if (!pick.taglia) return;
+      if (!loggato()) {
+        chiediAccesso('Per mettere le maglie nel carrello serve un account.');
+        return;
+      }
       t.disabled = true;
       const lbl = t.querySelector('.lbl');
       const testo = lbl.textContent;
@@ -806,6 +846,7 @@ window.App = (function () {
     const voce = e.target.closest('.menu-item');
     if (!voce) return;
     apriMenu(false);
+    if (voce.dataset.azione === 'accedi') return chiediAccesso();
     vai(voce.dataset.goto);
   });
   document.addEventListener('click', (e) => {
@@ -817,14 +858,24 @@ window.App = (function () {
 
   /* ---------------- avvio ---------------- */
 
+  // uid null = visitatore: il catalogo si guarda lo stesso, l'account serve
+  // solo per carrello e ordini.
   async function boot(uid) {
-    state.uid = uid;
+    state.uid = uid || null;
     state.booted = true;
-    try {
-      const prof = await q(window.sb.from('profiles').select('*').eq('id', uid).maybeSingle());
-      state.profile = prof || null;
-    } catch (_) { state.profile = null; }
-    try { await loadCart(); } catch (_) { /* il badge riprova al prossimo giro */ }
+    state.profile = null;
+    state.ordini = null;
+    state.cart = [];
+
+    if (state.uid) {
+      try {
+        const prof = await q(window.sb.from('profiles').select('*').eq('id', state.uid).maybeSingle());
+        state.profile = prof || null;
+      } catch (_) { state.profile = null; }
+      try { await loadCart(); } catch (_) { /* il badge riprova al prossimo giro */ }
+    } else {
+      aggiornaBadge();
+    }
     await route();
   }
 
