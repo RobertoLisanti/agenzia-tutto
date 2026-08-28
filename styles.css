@@ -391,21 +391,25 @@ main#view {
   color: var(--accent);
 }
 
-/* WhatsApp: una pillola compatta, non un bottone che occupa tutta la riga */
-.contatti { margin-top: 22px; }
-.wa-btn {
-  display: inline-flex; align-items: center; gap: 9px;
-  padding: 10px 16px 10px 13px;
-  border-radius: 999px;
-  background: rgba(37, 211, 102, .12);
-  border: 1px solid rgba(37, 211, 102, .4);
-  color: #4ee68b;
-  font-size: 14px; font-weight: 700;
-  transition: background .15s, border-color .15s, transform .12s var(--ease);
+/* WhatsApp: la bolla fissa in basso a destra, solo icona */
+.wa-fab {
+  position: fixed;
+  right: 18px;
+  bottom: calc(env(safe-area-inset-bottom) + 18px);
+  z-index: 45;
+  width: 56px; height: 56px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: #25d366;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(37, 211, 102, .35), 0 2px 8px rgba(0, 0, 0, .35);
+  transition: transform .15s var(--ease), box-shadow .2s;
 }
-.wa-btn svg { flex: none; }
-.wa-btn:hover { background: rgba(37, 211, 102, .2); border-color: rgba(37, 211, 102, .65); }
-.wa-btn:active { transform: scale(.96); }
+.wa-fab:hover { transform: scale(1.06); box-shadow: 0 10px 30px rgba(37, 211, 102, .45), 0 2px 8px rgba(0, 0, 0, .35); }
+.wa-fab:active { transform: scale(.94); }
+@media (min-width: 900px) {
+  .wa-fab { right: 26px; bottom: calc(env(safe-area-inset-bottom) + 26px); }
+}
 
 /* ---------------- dettaglio prodotto ---------------- */
 .detail { display: grid; gap: 20px; }
