@@ -14,7 +14,7 @@
 'use strict';
 
 window.App = (function () {
-  const APP_VER = 'v8';
+  const APP_VER = 'v9';
   const AP = String.fromCharCode(39);   // apostrofo, per non litigare con le virgolette
   const NET_TIMEOUT = 15000;
 
@@ -35,6 +35,7 @@ window.App = (function () {
     prodotti: {},        // collezione_id -> [prodotti]
     cart: [],
     ordini: null,
+    ordineInSospeso: false,   // stava ordinando quando gli abbiamo chiesto l'account
   };
 
   // stato locale della vista dettaglio (taglia/quantita' scelte)
@@ -160,12 +161,66 @@ window.App = (function () {
     return p;
   }
 
+  /* Carrello: chi ha l'account ce l'ha sul server (lo ritrova su ogni
+     dispositivo), chi non ce l'ha ancora lo tiene nel browser. Al primo
+     accesso il secondo si travasa nel primo. */
+  const CART_KEY = 'agenzia.carrello';
+
+  function cartLocale() {
+    try { return JSON.parse(localStorage.getItem(CART_KEY)) || []; } catch (_) { return []; }
+  }
+  function salvaCartLocale(righe) {
+    try { localStorage.setItem(CART_KEY, JSON.stringify(righe)); } catch (_) { /* modalita' privata */ }
+  }
+  const idLocale = (prodottoId, taglia) => 'loc:' + prodottoId + ':' + taglia;
+
   async function loadCart() {
-    state.cart = await q(window.sb.from('carrello_righe')
-      .select('id, prodotto_id, taglia, quantita, prodotti(id, slug, nome, prezzo_cent, immagini, collezione_id)')
-      .order('created_at')) || [];
+    if (loggato()) {
+      state.cart = await q(window.sb.from('carrello_righe')
+        .select('id, prodotto_id, taglia, quantita, prodotti(id, slug, nome, prezzo_cent, immagini, collezione_id)')
+        .order('created_at')) || [];
+    } else {
+      const righe = cartLocale();
+      if (!righe.length) {
+        state.cart = [];
+      } else {
+        const prodotti = await q(window.sb.from('prodotti')
+          .select('id, slug, nome, prezzo_cent, immagini, collezione_id')
+          .in('id', righe.map((r) => r.prodotto_id))) || [];
+        const perId = Object.fromEntries(prodotti.map((p) => [p.id, p]));
+        // se una maglia e' sparita dal catalogo, la riga sparisce dal carrello
+        state.cart = righe.filter((r) => perId[r.prodotto_id]).map((r) => ({
+          id: idLocale(r.prodotto_id, r.taglia),
+          prodotto_id: r.prodotto_id,
+          taglia: r.taglia,
+          quantita: r.quantita,
+          prodotti: perId[r.prodotto_id],
+        }));
+      }
+    }
     aggiornaBadge();
     return state.cart;
+  }
+
+  // all'accesso il carrello del browser diventa quello dell'account
+  async function unisciCarrelloLocale() {
+    const righe = cartLocale();
+    if (!righe.length) return;
+    const esistenti = await q(window.sb.from('carrello_righe').select('id, prodotto_id, taglia, quantita')) || [];
+    for (const r of righe) {
+      const gia = esistenti.find((e) => e.prodotto_id === r.prodotto_id && e.taglia === r.taglia);
+      try {
+        if (gia) {
+          await q(window.sb.from('carrello_righe')
+            .update({ quantita: Math.min(99, gia.quantita + r.quantita), updated_at: new Date().toISOString() })
+            .eq('id', gia.id));
+        } else {
+          await q(window.sb.from('carrello_righe')
+            .insert({ user_id: state.uid, prodotto_id: r.prodotto_id, taglia: r.taglia, quantita: r.quantita }));
+        }
+      } catch (_) { /* una riga persa non deve bloccare l'accesso */ }
+    }
+    salvaCartLocale([]);
   }
 
   function aggiornaBadge() {
@@ -190,6 +245,15 @@ window.App = (function () {
     state.cart.reduce((s, r) => s + r.quantita * ((r.prodotti && r.prodotti.prezzo_cent) || 0), 0);
 
   async function aggiungiAlCarrello(prodottoId, taglia, qta) {
+    if (!loggato()) {
+      const righe = cartLocale();
+      const gia = righe.find((r) => r.prodotto_id === prodottoId && r.taglia === taglia);
+      if (gia) gia.quantita = Math.min(99, gia.quantita + qta);
+      else righe.push({ prodotto_id: prodottoId, taglia, quantita: qta });
+      salvaCartLocale(righe);
+      await loadCart();
+      return;
+    }
     const esistente = state.cart.find((r) => r.prodotto_id === prodottoId && r.taglia === taglia);
     if (esistente) {
       const nuova = Math.min(99, esistente.quantita + qta);
@@ -208,6 +272,15 @@ window.App = (function () {
     const nuova = riga.quantita + delta;
     if (nuova <= 0) return rimuoviRiga(rigaId, true);
     if (nuova > 99) return;
+    if (!loggato()) {
+      const righe = cartLocale();
+      const l = righe.find((r) => r.prodotto_id === riga.prodotto_id && r.taglia === riga.taglia);
+      if (l) l.quantita = nuova;
+      salvaCartLocale(righe);
+      await loadCart();
+      renderCarrello();
+      return;
+    }
     await q(window.sb.from('carrello_righe')
       .update({ quantita: nuova, updated_at: new Date().toISOString() }).eq('id', rigaId));
     await loadCart();
@@ -219,7 +292,12 @@ window.App = (function () {
       const ok = await confirmModal('Togliere la maglia?', 'La riga sparisce dal carrello.', 'Togli', true);
       if (!ok) return;
     }
-    await q(window.sb.from('carrello_righe').delete().eq('id', rigaId));
+    const riga = state.cart.find((r) => r.id === rigaId);
+    if (!loggato()) {
+      salvaCartLocale(cartLocale().filter((r) => !(riga && r.prodotto_id === riga.prodotto_id && r.taglia === riga.taglia)));
+    } else {
+      await q(window.sb.from('carrello_righe').delete().eq('id', rigaId));
+    }
     await loadCart();
     renderCarrello();
   }
@@ -520,12 +598,6 @@ window.App = (function () {
   }
 
   async function vistaCarrello() {
-    if (!loggato()) {
-      viewEl.innerHTML = '<div class="section-title"><h2>Carrello</h2></div>' +
-        invitoAccesso('Il carrello e' + AP + ' di chi ha un account',
-          'Guardare le maglie e' + AP + ' libero: per metterle nel carrello e ordinare serve iscriversi, ci vuole un minuto.');
-      return;
-    }
     viewEl.innerHTML = `<div class="section-title"><h2>Carrello</h2></div>${skeletonGrid(2)}`;
     await loadCart();
     renderCarrello();
@@ -575,7 +647,6 @@ window.App = (function () {
   }
 
   async function renderCheckout() {
-    if (!loggato()) return vai('#/carrello');
     await loadCart();
     if (!state.cart.length) return vai('#/carrello');
 
@@ -613,7 +684,7 @@ window.App = (function () {
           <textarea id="ckNote" placeholder="Quando passi a ritirare, richieste particolari..."></textarea>
         </label>
         <p class="form-msg" id="ckMsg" hidden></p>
-        <button class="btn block" id="ckBtn" type="submit"><span class="lbl">Invia ordine</span></button>
+        <button class="btn block" id="ckBtn" type="submit"><span class="lbl">${loggato() ? 'Invia ordine' : "Accedi e invia l'ordine"}</span></button>
       </form>
       <p class="muted" style="margin:14px 0 0;font-size:12.5px;line-height:1.5">
         Nessun pagamento online: l'ordine resta da pagare finché non ci vediamo. Ritiro a mano.
@@ -621,6 +692,12 @@ window.App = (function () {
   }
 
   async function inviaOrdine() {
+    if (!loggato()) {
+      // il carrello resta dov'e': dopo l'accesso si travasa nell'account
+      state.ordineInSospeso = true;
+      chiediAccesso("Ultimo passo: accedi o iscriviti per inviare l'ordine. Il carrello resta com'è.");
+      return;
+    }
     const btn = document.getElementById('ckBtn');
     const msg = document.getElementById('ckMsg');
     const nome = document.getElementById('ckNome').value.trim();
@@ -665,7 +742,7 @@ window.App = (function () {
   async function renderOrdini() {
     if (!loggato()) {
       viewEl.innerHTML = '<div class="section-title"><h2>I tuoi ordini</h2></div>' +
-        invitoAccesso('Qui finiscono i tuoi ordini', 'Accedi per vedere cosa hai ordinato e a che punto e' + AP + '.');
+        invitoAccesso('Qui finiscono i tuoi ordini', 'Accedi per vedere cosa hai ordinato e a che punto è.');
       return;
     }
     viewEl.innerHTML = `<div class="section-title"><h2>I tuoi ordini</h2></div>${skeletonGrid(2)}`;
@@ -788,10 +865,6 @@ window.App = (function () {
 
     if (a === 'aggiungi') {
       if (!pick.taglia) return;
-      if (!loggato()) {
-        chiediAccesso('Per mettere le maglie nel carrello serve un account.');
-        return;
-      }
       t.disabled = true;
       const lbl = t.querySelector('.lbl');
       const testo = lbl.textContent;
@@ -872,9 +945,19 @@ window.App = (function () {
         const prof = await q(window.sb.from('profiles').select('*').eq('id', state.uid).maybeSingle());
         state.profile = prof || null;
       } catch (_) { state.profile = null; }
+      try { await unisciCarrelloLocale(); } catch (_) { /* si riprova al prossimo accesso */ }
       try { await loadCart(); } catch (_) { /* il badge riprova al prossimo giro */ }
     } else {
-      aggiornaBadge();
+      await loadCart().catch(() => { state.cart = []; aggiornaBadge(); });
+    }
+
+    // se stava ordinando quando gli abbiamo chiesto l'account, lo riportiamo li'
+    if (state.uid && state.ordineInSospeso) {
+      state.ordineInSospeso = false;
+      if (state.cart.length) {
+        toast("Bentornato: ora puoi inviare l'ordine");
+        if (location.hash !== '#/checkout') return vai('#/checkout');
+      }
     }
     await route();
   }
