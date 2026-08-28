@@ -14,7 +14,7 @@
 'use strict';
 
 window.App = (function () {
-  const APP_VER = 'v14';
+  const APP_VER = 'v15';
   const AP = String.fromCharCode(39);   // apostrofo, per non litigare con le virgolette
   const NET_TIMEOUT = 15000;
 
@@ -953,6 +953,14 @@ window.App = (function () {
     state.profile = null;
     state.ordini = null;
     state.cart = [];
+
+    // Il catalogo dipende da CHI guarda: l'admin vede anche le collezioni
+    // spente. Entrando o uscendo si buttano le cache e si rilegge tutto,
+    // altrimenti resterebbe in pagina la roba dell'utente precedente.
+    state.servizi = [];
+    state.collezioni = {};
+    state.conteggi = {};
+    state.prodotti = {};
 
     if (state.uid) {
       try {
