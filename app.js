@@ -14,7 +14,7 @@
 'use strict';
 
 window.App = (function () {
-  const APP_VER = 'v10';
+  const APP_VER = 'v12';
   const AP = String.fromCharCode(39);   // apostrofo, per non litigare con le virgolette
   const NET_TIMEOUT = 15000;
 
@@ -113,6 +113,8 @@ window.App = (function () {
     cart: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.55L21 8H6.2"/><circle cx="10" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg>',
     box: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l1 4H5l1-4Z"/><path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M9 11h6"/></svg>',
     chev: '<svg class="chev" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+    scudo: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3v6c0 4.3-3 8.2-7.5 9.5C7.5 20.2 4.5 16.3 4.5 12V6z"/><path d="M9.2 12.2l2 2 3.6-4"/></svg>',
+    esterno: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v4.5a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2H10"/></svg>',
     codice: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg>',
     cronometro: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.2 2.2M9.5 2.5h5M12 2.5V6"/></svg>',
     manubrio: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9v6M17.5 9v6M3.5 10.5v3M20.5 10.5v3M6.5 12h11"/></svg>',
@@ -396,7 +398,7 @@ window.App = (function () {
         <p>Scegli il servizio, il resto lo mettiamo noi.</p>
       </section>
       <div class="section-title"><h2>I nostri servizi</h2></div>
-      <div class="grid uno" id="servizi">${skeletonGrid(2)}</div>`;
+      <div class="servizi" id="servizi">${skeletonGrid(4)}</div>`;
 
     const servizi = await loadServizi();
     const box = document.getElementById('servizi');
@@ -404,24 +406,30 @@ window.App = (function () {
       box.outerHTML = emptyState(ICO.box, 'Ancora nessun servizio', 'Torna tra poco: stiamo preparando le cose.');
       return;
     }
-    box.classList.remove('grid');
-    box.className = 'grid uno';
+
     box.innerHTML = servizi.map((sv) => {
       const ico = ICO[sv.icona] || ICO.box;
-      if (sv.stato !== 'attivo') {
-        return `
-          <div class="card servizio soon">
-            <div class="ico">${ico}</div>
-            <div class="txt"><h3>${esc(sv.nome)}</h3><p>${esc(sv.descrizione || '')}</p></div>
-            <span class="pill-soon">In arrivo</span>
-          </div>`;
-      }
-      return `
-        <a class="card servizio" href="#/${esc(sv.id)}">
-          <div class="ico">${ico}</div>
-          <div class="txt"><h3>${esc(sv.nome)}</h3><p>${esc(sv.descrizione || '')}</p></div>
-          ${ICO.chev}
-        </a>`;
+      const chi = (sv.scheda && sv.scheda.persona) || '';
+      const iniz = (sv.scheda && sv.scheda.iniziali) || '';
+      const inArrivo = sv.stato !== 'attivo';
+      const catalogo = sv.tipo !== 'scheda';
+
+      const piede = catalogo
+        ? '<span class="azione">Vedi il catalogo</span>'
+        : (chi ? `<span class="chi"><span class="chi-avatar">${esc(iniz)}</span>${esc(chi)}</span>` : '');
+
+      const corpo = `
+        <div class="serv-top">
+          <span class="serv-ico">${ico}</span>
+          ${inArrivo ? '<span class="pill-soon">In arrivo</span>' : ''}
+        </div>
+        <h3>${esc(sv.nome)}</h3>
+        <p>${esc(sv.descrizione || '')}</p>
+        <div class="serv-piede">${piede}${inArrivo ? '' : ICO.chev}</div>`;
+
+      return inArrivo
+        ? `<div class="card serv soon">${corpo}</div>`
+        : `<a class="card serv${catalogo ? ' serv-hero' : ''}" href="#/${esc(sv.id)}">${corpo}</a>`;
     }).join('');
   }
 
@@ -456,18 +464,21 @@ window.App = (function () {
         <div class="section-title"><h2>Come si parte</h2></div>
         <p class="descr" style="margin-top:0">${esc(s.come_lavora)}</p>` : ''}
 
-      <div class="contatti">
-        ${wa ? `<a class="btn block wa" href="${esc(wa)}" target="_blank" rel="noopener">
-          ${ICO.whatsapp}<span>Scrivi su WhatsApp</span>
+      ${s.link_url ? `
+        <a class="link-esterno" href="${esc(s.link_url)}" target="_blank" rel="noopener noreferrer">
+          <span>${esc(s.link_testo || 'Vai al sito')}</span>${ICO.esterno}
         </a>` : ''}
-        ${s.telefono ? `<a class="btn ghost block" href="tel:${esc(s.telefono)}">
-          ${ICO.telefono}<span>Chiama ${esc(s.numero_esteso || s.telefono)}</span>
-        </a>` : ''}
-      </div>
-      <p class="muted" style="margin:14px 0 0;font-size:12.5px;line-height:1.5">
-        Questo servizio si tratta direttamente con ${esc((s.persona || '').split(' ')[0] || 'lui')}:
-        preventivo e pagamento non passano dal sito.
-      </p>`;
+
+      ${wa ? `
+        <div class="contatti">
+          <a class="wa-btn" href="${esc(wa)}" target="_blank" rel="noopener">
+            ${ICO.whatsapp}<span>Scrivigli su WhatsApp</span>
+          </a>
+        </div>
+        <p class="muted" style="margin:12px 0 0;font-size:12.5px;line-height:1.5">
+          Questo servizio si tratta direttamente con ${esc((s.persona || '').split(' ')[0] || 'lui')}:
+          preventivo e pagamento non passano dal sito.
+        </p>` : ''}`;
   }
 
   async function renderServizio(servizioId) {

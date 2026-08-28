@@ -209,13 +209,41 @@ main#view {
   .card:hover { border-color: var(--line-2); box-shadow: var(--shadow); }
 }
 
-/* servizi */
-.servizio {
-  padding: 16px;
-  display: flex; align-items: center; gap: 13px;
-  position: relative;
+/* ---------------- servizi in home ----------------
+   Card vere, non righe di elenco: la prima (il catalogo) e' larga e in
+   evidenza, le altre a due colonne con la faccia di chi le offre. */
+.servizi {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
 }
-.servizio .ico {
+@media (min-width: 640px) {
+  .servizi { grid-template-columns: 1fr 1fr; }
+  .serv-hero { grid-column: 1 / -1; }
+}
+
+.serv {
+  padding: 17px 18px 15px;
+  display: flex; flex-direction: column;
+  min-height: 168px;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, .035), transparent 42%),
+    var(--surface);
+}
+.serv::after {
+  content: "";
+  position: absolute; right: -38px; bottom: -46px;
+  width: 130px; height: 130px; border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-soft), transparent 70%);
+  opacity: .9;
+  transition: transform .3s var(--ease);
+}
+@media (hover: hover) { .serv:hover::after { transform: scale(1.25); } }
+
+.serv-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.serv-ico {
   width: 44px; height: 44px; flex: none;
   display: grid; place-items: center;
   border-radius: 13px;
@@ -223,18 +251,65 @@ main#view {
   border: 1px solid var(--accent-line);
   color: var(--accent);
 }
-.servizio .txt { min-width: 0; flex: 1; }
-.servizio h3 { font-size: 17px; }
-.servizio p { margin: 3px 0 0; font-size: 12.8px; color: var(--muted); line-height: 1.4; }
-.servizio .chev { color: var(--muted-2); flex: none; }
-.servizio.soon { opacity: .58; cursor: default; }
-.servizio.soon .ico { background: var(--surface-2); border-color: var(--line); color: var(--muted-2); }
-.servizio.soon:active { transform: none; }
+.serv h3 { font-size: 19px; line-height: 1.15; }
+.serv p { margin: 5px 0 0; font-size: 13.2px; color: var(--muted); line-height: 1.45; }
+
+.serv-piede {
+  margin-top: auto; padding-top: 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  position: relative;
+}
+.serv-piede .chi {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 700; color: var(--muted);
+  min-width: 0;
+}
+.chi-avatar {
+  width: 26px; height: 26px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 9px;
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+  font-family: Oswald, sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .5px;
+  color: var(--text);
+}
+.serv-piede .azione { font-size: 13px; font-weight: 800; color: var(--accent); }
+.serv-piede .chev { color: var(--muted-2); flex: none; }
+
+/* il catalogo: piu' alto e con un accento piu' deciso */
+.serv-hero {
+  min-height: 186px;
+  background:
+    linear-gradient(150deg, rgba(242, 167, 27, .17), transparent 58%),
+    var(--surface);
+  border-color: var(--accent-line);
+}
+.serv-hero h3 { font-size: 23px; }
+.serv-hero p { font-size: 14px; max-width: 44ch; }
+
+.serv.soon { opacity: .55; cursor: default; }
+.serv.soon::after { display: none; }
+.serv.soon .serv-ico { background: var(--surface-2); border-color: var(--line); color: var(--muted-2); }
+.serv.soon:active { transform: none; }
 .pill-soon {
   font-size: 10px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase;
   color: var(--muted-2); border: 1px solid var(--line); border-radius: 999px;
-  padding: 3px 8px; flex: none;
+  padding: 4px 9px; flex: none;
 }
+
+/* link a un sito esterno dentro la scheda persona */
+.link-esterno {
+  margin-top: 22px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-2);
+  border-radius: 13px;
+  background: var(--surface);
+  font-size: 14.5px; font-weight: 700;
+  transition: border-color .15s, background .15s;
+}
+.link-esterno svg { color: var(--muted-2); flex: none; }
+.link-esterno:hover { border-color: var(--accent-line); background: var(--surface-2); }
 
 /* collezioni */
 .collezione .cover {
@@ -316,9 +391,21 @@ main#view {
   color: var(--accent);
 }
 
-.contatti { display: grid; gap: 10px; margin-top: 24px; }
-.btn.wa { background: #25d366; color: #06301a; }
-.btn.wa svg { flex: none; }
+/* WhatsApp: una pillola compatta, non un bottone che occupa tutta la riga */
+.contatti { margin-top: 22px; }
+.wa-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 10px 16px 10px 13px;
+  border-radius: 999px;
+  background: rgba(37, 211, 102, .12);
+  border: 1px solid rgba(37, 211, 102, .4);
+  color: #4ee68b;
+  font-size: 14px; font-weight: 700;
+  transition: background .15s, border-color .15s, transform .12s var(--ease);
+}
+.wa-btn svg { flex: none; }
+.wa-btn:hover { background: rgba(37, 211, 102, .2); border-color: rgba(37, 211, 102, .65); }
+.wa-btn:active { transform: scale(.96); }
 
 /* ---------------- dettaglio prodotto ---------------- */
 .detail { display: grid; gap: 20px; }
