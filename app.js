@@ -14,7 +14,7 @@
 'use strict';
 
 window.App = (function () {
-  const APP_VER = 'v15';
+  const APP_VER = 'v16';
   const AP = String.fromCharCode(39);   // apostrofo, per non litigare con le virgolette
   const NET_TIMEOUT = 15000;
 
