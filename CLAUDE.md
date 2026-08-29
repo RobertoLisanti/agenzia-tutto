@@ -1,4 +1,4 @@
-# agenzia-tutto (Agenzia TUTTO)
+# sito-agenzia-tutto (Agenzia TUTTO)
 
 Portale di servizi dell'Agenzia. Due tipi di servizio:
 
@@ -9,8 +9,8 @@ Portale di servizi dell'Agenzia. Due tipi di servizio:
 - **scheda** (oggi: Serramenti, Eventi) - la pagina di chi fa quel mestiere, con i bottoni
   per scrivergli su WhatsApp o chiamarlo. Niente acquisto dal sito.
 
-Repo **pubblico** `RobertoLisanti/agenzia-tutto`, live su
-https://robertolisanti.github.io/agenzia-tutto/ (GitHub Pages da `main`, auto-deploy al push).
+Repo **pubblico** `RobertoLisanti/sito-agenzia-tutto`, live su
+https://robertolisanti.github.io/sito-agenzia-tutto/ (GitHub Pages da `main`, auto-deploy al push).
 
 **Architettura (come)** -> skill `sito-web-statico` + `backend-supabase` (nel repo di
 config, `.claude\skills\`).
