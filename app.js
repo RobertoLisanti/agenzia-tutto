@@ -14,7 +14,7 @@
 'use strict';
 
 window.App = (function () {
-  const APP_VER = 'v16';
+  const APP_VER = 'v17';
   const AP = String.fromCharCode(39);   // apostrofo, per non litigare con le virgolette
   const NET_TIMEOUT = 15000;
 
@@ -127,7 +127,9 @@ window.App = (function () {
 
   function immagine(p, cls = '') {
     const src = Array.isArray(p.immagini) && p.immagini.length ? p.immagini[0] : null;
-    if (src) return `<img src="${esc(src)}" alt="${esc(p.nome)}" loading="lazy" />`;
+    // la versione nell'URL: se ricarico una foto tenendo lo stesso nome, il
+    // browser di chi era gia' passato deve riscaricarla, non pescare la vecchia
+    if (src) return `<img src="${esc(src)}?${APP_VER}" alt="${esc(p.nome)}" loading="lazy" />`;
     return `<div class="shot-ph ${cls}"><span>${esc(p.nome)}</span></div>`;
   }
 
